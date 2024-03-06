@@ -78,6 +78,9 @@ int verifierUtilisateur(User *utilisateur, User users[], int numUsers) {
     return 0;
 }
 
+void logout() {
+    printf("Déconnexion réussie !\n");
+}
 
 int main() {
     User apprenants[MAX_USERS];
@@ -100,6 +103,7 @@ int main() {
         printf("Nom d'utilisateur ou mot de passe incorrect.\n");
     }
 
+logout();
     return 0;
 }
 
