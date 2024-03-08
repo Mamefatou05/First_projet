@@ -4,14 +4,15 @@
 #include <unistd.h>
 #include <termios.h>
 
-
-
 #define MAX_USERS 100
+#define MAX_PASSWORD_LENGTH 25
 
 typedef struct {
     char username[20];
     char password[20];
 } User;
+
+void saisirMotDePasse(char *password);
 
 void loadUsers(const char *filename, User users[], int *numUsers) {
     FILE *file = fopen(filename, "r");
@@ -27,50 +28,8 @@ void loadUsers(const char *filename, User users[], int *numUsers) {
     fclose(file);
 }
 
-void masquerMotDePasse(char *password) {
-    int i = 0;
-    printf("Mot de passe masqué: ");
-    while (password[i] != '\0') {
-        printf("*");
-        i++;
-    }
-    printf("\n");
-}
-
-User saisirUser() {
-    User u;
-
-    printf("Donnez le nom d'utilisateur: ");
-    fgets(u.username, sizeof(u.username), stdin);
-    u.username[strcspn(u.username, "\n")] = '\0';
-
-    printf("Donnez votre mot de passe: ");
-    fflush(stdout); 
-
-    char c;
-    int i = 0;
-    while ((c = getchar()) != '\n') {
-        if (c == 127) { 
-            if (i > 0) { 
-                printf("\b \b"); 
-                i--;
-            }
-        } else {
-            u.password[i++] = c;
-            printf("*"); 
-            printf("\n");
-       
-        }
-
-    }
-    return u ;
-}     
-
-
 int verifierUtilisateur(User *utilisateur, User users[], int numUsers) {
     for (int i = 0; i < numUsers; i++) {
-        // printf(" %s - %s\n", utilisateur->username, users[i].username);
-        // printf(" %s - %s\n", utilisateur->password, users[i].password);
         if (strcmp(users[i].username, utilisateur->username) == 0 && strcmp(users[i].password, utilisateur->password) == 0) {
             return 1;
         }
@@ -82,29 +41,117 @@ void logout() {
     printf("Déconnexion réussie !\n");
 }
 
+void disableEcho() {
+    struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+}
+
+void enableEcho() {
+    struct termios oldt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    oldt.c_lflag |= (ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+}
+
+
+
+void saisirMotDePasse(char *password) {
+    printf("Entrez votre mot de passe : ");
+    fflush(stdout);
+
+    disableEcho();
+
+    int i = 0;
+    char ch;
+
+    while ((ch = getchar()) != '\n' && ch != '\r' && i < MAX_PASSWORD_LENGTH - 1) {
+        if (ch == 127 || ch == 8) {
+            if (i > 0) {
+                printf("\b \b");
+                i--;
+            }
+        } else {
+            password[i++] = ch;
+            putchar('*');
+        }
+    }
+
+    password[i] = '\0';
+    enableEcho();
+    printf("\n");
+}
+int SaisiUser() {
+
+          User apprenants[MAX_USERS];
+          int numApprenants = 0;
+          User admins[MAX_USERS];
+          int numAdmins = 0;
+          User utilisateur;
+    char username[15];
+    char pwd[MAX_PASSWORD_LENGTH];
+
+    char reponse;
+    int result;
+    int valid;
+    do {
+        do {
+            valid = 0;
+
+            printf("Veuillez saisir votre username : ");
+            fgets(username, sizeof(username), stdin);
+            if (username[0] == '\n' || username[0] == '\0') {
+                puts("username invalide");
+                valid = 1;
+            }
+        } while (valid == 1);
+
+        saisirMotDePasse(pwd);
+
+        username[strcspn(username, "\n")] = '\0';
+        pwd[strcspn(pwd, "\n")] = '\0';
+        
+        // Copier les chaînes de caractères dans la structure User
+        
+        strcpy(utilisateur.username, username);
+        strcpy(utilisateur.password, pwd);
+
+         loadUsers("apprenant.txt", apprenants, &numApprenants);
+         loadUsers("admin.txt", admins, &numAdmins);
+        result = verifierUtilisateur(&utilisateur, apprenants, numApprenants);
+        result = verifierUtilisateur(&utilisateur, admins, numAdmins);
+
+        if (result == 0) {
+            puts("username ou mot de passe invalide");
+            puts("Voulez-vous réessayer de vous connecter ? (o/n)");
+            scanf(" %c", &reponse);
+            getchar();
+        } else {
+            break;
+        }
+    } while (reponse != 'n');
+
+    return result;
+}
+
+
 int main() {
-    User apprenants[MAX_USERS];
-    int numApprenants = 0;
-    User admins[MAX_USERS];
-    int numAdmins = 0;
+   
+   
 
-    loadUsers("apprenant.txt", apprenants, &numApprenants);
-    loadUsers("admin.txt", admins, &numAdmins);
+    // char username[15];
+    // char pwd[MAX_PASSWORD_LENGTH];
 
-    User utilisateur = saisirUser();
+    int utilisateur = SaisiUser();
 
-    if (verifierUtilisateur(&utilisateur, apprenants, numApprenants)) {
+    if (utilisateur == 1) {
         printf("Connecté en tant qu'apprenant.\n");
-
-    } else if (verifierUtilisateur(&utilisateur, admins, numAdmins)) {
-        printf("Connecté en tant qu'administrateur.\n");
-
     } else {
         printf("Nom d'utilisateur ou mot de passe incorrect.\n");
     }
 
-logout();
+    logout();
     return 0;
 }
-
-

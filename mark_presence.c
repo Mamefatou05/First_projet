@@ -15,6 +15,7 @@ void afficherListePresences();
 void marquerPresence(Apprenant *etudiants, int nbEtudiants);
 void afficherClasses();
 void marquerPresenceApprenant(Apprenant *apprenant, int nbapprenant) ;
+int afficherClassesApprenant() ;
 
 int main()
 {   
@@ -22,49 +23,31 @@ int main()
     Apprenant apprenants[ nbApprenants]; 
     
     int choix;
-    do
-    {
-        printf("\nMenu Admin:\n");
-        printf("1. Gestion des étudiants\n");
-        printf("2. Génération de fichiers\n");
-        printf("3. Marquer les présences\n");
-        printf("4. Listes des présences\n");
-        printf("5. Envoyer un message\n");
-        printf("6. Quitter\n");
-        printf("Votre choix : ");
-        scanf("%d", &choix);
-        if (choix == 3)
-        {
-            printf("Vous avez choisi de marquer la présence de chaque étudiant\n");
-            afficherClasses(); // Appel de la fonction pour afficher les classes et marquer les présences
-        }
+    // do
+    // {
+    //     printf("\nMenu Admin:\n");
+    //     printf("1. Gestion des étudiants\n");
+    //     printf("2. Génération de fichiers\n");
+    //     printf("3. Marquer les présences\n");
+    //     printf("4. Listes des présences\n");
+    //     printf("5. Envoyer un message\n");
+    //     printf("6. Quitter\n");
+    //     printf("Votre choix : ");
+    //     scanf("%d", &choix);
+    //     if (choix == 3)
+    //     {
+    //         printf("Vous avez choisi de marquer la présence de chaque étudiant\n");
+    //         afficherClasses(); // Appel de la fonction pour afficher les classes et marquer les présences
+    //     }
 
-        if (choix == 4)
-        {
-           afficherListePresences() ;
-        }
+    //     if (choix == 4)
+    //     {
+    //        afficherListePresences() ;
+    //     }
         
-    } while (choix != 5);
+    // } while (choix != 5);
 
 
-    do
-    {
-        printf("\nMenu Apprenant:\n");
-        printf("1. Marquer ma présence\n");
-        printf("2. Nombre de minutes d'absence\n");
-        printf("3. Mes messages (0)\n");
-        printf("4. Quitter\n");
-        printf("Votre choix : ");
-        scanf("%d", &choix);
-
-        if (choix == 1)
-        {
-           marquerPresenceApprenant(apprenants, nbApprenants);
-            
-        }
-        
-
-    } while (choix >= 1 || choix <= 4);
 
 
     return 0;
@@ -213,10 +196,82 @@ void afficherListePresences() {
     fclose(fichier);
 }
 
+
+
+
+
+
+
+
+    // do
+    // {
+    //     printf("\nMenu Apprenant:\n");
+    //     printf("1. Marquer ma présence\n");
+    //     printf("2. Nombre de minutes d'absence\n");
+    //     printf("3. Mes messages (0)\n");
+    //     printf("4. Quitter\n");
+    //     printf("Votre choix : ");
+    //     scanf("%d", &choix);
+
+    //     if (choix == 1)
+    //     {
+    //        marquerPresenceApprenant(apprenants, nbApprenants);
+            
+    //     }
+        
+
+    // } while (choix >= 1 || choix <= 4);
 // pour le menu apprenant
+
+int afficherClassesApprenant(){
+    FILE *f_classes = fopen("class.txt", "r");
+    if (f_classes == NULL)
+    {
+        printf("Erreur lors de l'ouverture du fichier des classes.\n");
+        exit(1);
+    }
+     
+    printf("Liste des classes :\n");
+    char classe[50];
+    int i = 0;
+    while (fgets(classe, sizeof(classe), f_classes) != NULL)
+    {
+        i = i + 1;
+        printf("%d - %s", i, classe);
+    }
+    fclose(f_classes);
+
+    int choix_class_app;
+    printf("\n");
+    printf("Choisissez une classe : ");
+    scanf("%d", &choix_class_app);
+
+    char nom_fichier[50];
+    switch (choix_class_app)
+    {
+    case 1:
+        strcpy(nom_fichier, "dev_web.txt");
+        break;
+    case 2:
+        strcpy(nom_fichier, "ref_dig.txt");
+        break;
+    case 3:
+        strcpy(nom_fichier, "dev_data.txt");
+        break;
+    default:
+        printf("Classe invalide.\n");
+        exit(1);
+
+    return choix_class_app ;
+        
+    }
+    
+}
+
 void marquerPresenceApprenant(Apprenant *apprenant, int nbapprenant) {
     char presence[10];
     char nom[50], prenom[50];
+    int choix_class_app = afficherClassesApprenant();
     printf("Veuillez entrer votre nom: ");
     scanf("%s", nom);
     printf("Veuillez entrer votre prenom: ");
@@ -290,10 +345,10 @@ void marquerPresenceApprenant(Apprenant *apprenant, int nbapprenant) {
 
     time_t maintenant = time(NULL);
     struct tm *temps_info = localtime(&maintenant);
-    char date[20];
-    strftime(date, 20, "%Y-%m-%d %H:%M:%S", temps_info);
+    char datePresence[20];
+    strftime(datePresence, 20, "%Y-%m-%d %H:%M:%S", temps_info);
 
-    fprintf(fichier, "%s %s: %d - %s\n", nom, prenom, apprenant[index].presence, date);
+    fprintf(fichier, "%s %s: %d - %s\n", nom, prenom, apprenant[index].presence, datePresence);
 
     fclose(fichier);
 
