@@ -1,0 +1,3 @@
+|2024-03-11|21:02:35|REF-DIG|message a la classe|
+|2024-03-11|21:02:35|fafa_code|message a letudiant|
+|2024-03-11|21:02:35|test_code|message a letudiant|
