@@ -1,3 +1,0 @@
-dev_web
-ref_dig
-dev_data
