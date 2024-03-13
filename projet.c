@@ -12,15 +12,18 @@
 #define MAX_USERS 100
 #define MAX_SIZE 50
 
+char currentUsername[MAX_SIZE];
+
 typedef struct
 {
     char username[MAX_SIZE];
     char matricule[MAX_SIZE];
     char prenom[MAX_SIZE];
-
     char classe[MAX_SIZE];
     char password[MAX_SIZE];
     char messages[MAX_SIZE];
+    int total_retard;
+    int renvoi;
 } User;
 
 typedef struct
@@ -33,6 +36,17 @@ typedef struct
     char heure[20];
     int minutes_retard;
 } Presence;
+
+#define MAX_MESSAGES 100
+
+typedef struct
+{
+    char expediteur[MAX_SIZE];
+    char destinataire[MAX_SIZE];
+    char date[MAX_SIZE];
+    char heure[MAX_SIZE];
+    char message[MAX_SIZE * 5];
+} Message;
 
 void loadApprenants(char *filename, User apprenants[], int *numApprenants);
 void loadAdmins(char *filename, User admins[], int *numAdmins);
@@ -52,12 +66,22 @@ void afficherPresences();
 void GenereFichier();
 int verifierAdmin(char *password);
 int userExists(User users[], int numUsers, char *username, char *classe);
-void addToInbox(char *username, int numDestinataires, char *message);
-void MessageClass(User users[], int numUsers, char *classes[], int numClasses, char *message);
-void MessageUser(User users[], int numUsers, char *destinataires[], int numDestinataires, char *message);
-void MessagePromotion(User users[], int numUsers, char *message);
+void addToInbox(char *expediteur, char *username, char *date, char *heure, char *message);
+void MessageClass(char *expediteur, User users[], int numUsers, char *classe, char *message);
+void MessageUser(char *expediteur, User users[], int numUsers, char *destinataires[], int numDestinataires, char *message);
+void MessagePromotion(char *expediteur, User users[], int numUsers, char *message);
 void EnvoiMessage();
-void AfficherMessagesInbox(User users[], int numUsers);
+void decrementerMessagesLus(char *username);
+int AfficherMessages(char *username);
+void afficherRetardsParMatricule();
+int BunieuwulMaBayi(char *username);
+int RechercheApprenant(User apprenants[], int numApprenants, char *username);
+void writeApprenants(char *filename, User apprenants[], int numApprenants);
+void ajoutApprenant(User apprenants[], int *numApprenants);
+void modifierApprenant(User apprenants[], int numApprenants);
+void supprimerApprenant(User apprenants[], int *numApprenants);
+void Gestion_etudiant() ;
+
 void menuAdmin();
 void menuApprenant();
 
@@ -113,13 +137,15 @@ int verifierUtilisateur(User *utilisateur, User users[], int numUsers)
         {
             return 1;
         }
-        printf("%s %s", users[i].username, users[i].password);
     }
     return 0;
 }
 
 void logout()
 {
+
+    currentUsername[0] = '\0';
+
     printf("Déconnexion réussie !\n");
 }
 
@@ -224,7 +250,9 @@ int SaisiUser()
             result = verifierUtilisateur(&utilisateur, apprenants, numApprenants);
             if (result == 1)
             {
-                typeUtilisateur = 1; // Apprenant
+                typeUtilisateur = 1;               // Apprenant
+                strcpy(currentUsername, username); // Stockage du nom d'utilisateur actuel
+
                 break;
             }
         }
@@ -261,7 +289,7 @@ int rechercherApprenant(char *username, char *matricule, char *prenom, char *cla
             trouve = 1;
             break;
         }
-        printf("%s %s", matriculeApprenant, matricule);
+        // printf("%s %s", matriculeApprenant, matricule);
     }
 
     fclose(fichier);
@@ -317,8 +345,17 @@ void marquerPresenceApprenant(char *matricule, char *prenom, char *classe, char 
     struct tm *temps_info = localtime(&maintenant);
     char date[20];
     strftime(date, 20, "%Y-%m-%d", temps_info);
+    char heure[20];
+    strftime(heure, 20, "%H:%M:%S", temps_info);
 
     int minutes_retard = calculerRetard(heure_arrivee);
+
+    if (temps_info->tm_hour >= 16)
+    {
+        printf("L'enregistrement de présence n'est plus autorisé après 16h.\n");
+        fclose(fichier);
+        return;
+    }
 
     if (Present(matricule, date))
     {
@@ -327,8 +364,6 @@ void marquerPresenceApprenant(char *matricule, char *prenom, char *classe, char 
         return;
     }
 
-    char heure[20];
-    strftime(heure, 20, "%H:%M:%S", temps_info);
     fprintf(fichier, "%s %s %s %s %s %s %d\n", matricule, prenom, classe, password, date, heure, minutes_retard);
     fclose(fichier);
     printf("Présence de l'apprenant avec le matricule %s enregistrée à %s %s avec %d minutes de retard\n", matricule, date, heure, minutes_retard);
@@ -409,71 +444,6 @@ void obtenirAbsents(User *apprenants, Presence *presences)
     }
 
     fclose(fichier);
-}
-
-void menuApprenant()
-{
-    time_t maintenant;
-    struct tm *temps_info;
-    char date[MAX_SIZE];
-    int choix_apprenant;
-    char matricule[MAX_SIZE];
-    char username[MAX_SIZE];
-    char prenom[MAX_SIZE];
-    char classe[MAX_SIZE];
-    char password[MAX_SIZE];
-    User apprenants[MAX_USERS];
-    int numApprenants = 0;
-    do
-    {
-        printf("1-------MARQUER MA PRÉSENCE\n");
-        printf("2-------NOMBRE DE MINUTES D’ABSENCE\n");
-        printf("3-------MES MESSAGES (0)\n");
-        printf("4-------DECONNEXION\n");
-        printf("VOTRE CHOIX : ");
-        scanf("%d", &choix_apprenant);
-
-        while (getchar() != '\n')
-            ;
-
-        if (choix_apprenant == 1)
-        {
-            printf("Vous avez choisi de marquer votre présence\n");
-            char heure_arrivee[10];
-            maintenant = time(NULL);
-            temps_info = localtime(&maintenant);
-            strftime(date, sizeof(date), "%Y-%m-%d", temps_info);
-            strftime(heure_arrivee, sizeof(heure_arrivee), "%H:%M", temps_info);
-
-            printf("Entrer votre matricule : ");
-            fgets(matricule, sizeof(matricule), stdin);
-            matricule[strcspn(matricule, "\n")] = '\0';
-
-            if (rechercherApprenant(username, matricule, prenom, classe, password))
-            {
-                marquerPresenceApprenant(matricule, prenom, classe, password, heure_arrivee);
-
-                return;
-            }
-            else
-            {
-                printf("Matricule invalide.\n");
-                sleep(2);
-                continue;
-            }
-        }
-        else if (choix_apprenant == 3)
-        {
-            AfficherMessagesInbox(apprenants, numApprenants);
-        }
-
-        if (choix_apprenant == 4)
-        {
-            logout();
-        }
-        while (getchar() != '\n')
-            ;
-    } while (choix_apprenant >= 1 && choix_apprenant <= 4);
 }
 
 void marquerPresenceAdmin()
@@ -617,6 +587,7 @@ void GenerePresence()
     fclose(ficheG);
     fclose(fichier);
 }
+
 void GenerePresenceDate(char *date)
 {
 
@@ -682,72 +653,103 @@ void afficherPresences()
     fclose(ficheG);
 }
 
-
-
-void genererRapportRetards() {
+void genererRapportRetards()
+{
     FILE *fichier_present = fopen("Present.txt", "r");
-    if (fichier_present == NULL) {
+    if (fichier_present == NULL)
+    {
         printf("Impossible d'ouvrir le fichier de présence.\n");
         return;
     }
 
-    Apprenant apprenants[MAX_SIZE]; // tableau pour stocker les apprenants
+    User apprenants[MAX_SIZE]; // tableau pour stocker les apprenants
     int nb_apprenants = 0;
+    int QUOTA_RETARD = 90;
 
     // Initialisation des apprenants
-    for (int i = 0; i < MAX_SIZE; i++) {
+    for (int i = 0; i < MAX_SIZE; i++)
+    {
         strcpy(apprenants[i].matricule, "");
         apprenants[i].total_retard = 0;
         apprenants[i].renvoi = 0;
     }
 
     char ligne[MAX_SIZE];
-    while (fgets(ligne, MAX_SIZE, fichier_present) != NULL) {
+    while (fgets(ligne, MAX_SIZE, fichier_present) != NULL)
+    {
         char matriculeP[20], dateP[20], prenomP[20], heureP[20], classeP[20], mot_de_passeP[20];
         int minutes_retard;
         sscanf(ligne, "%s %s %s %s %s %s %d", matriculeP, prenomP, classeP, mot_de_passeP, dateP, heureP, &minutes_retard);
 
         // Recherche de l'apprenant dans le tableau
         int found = 0;
-        for (int i = 0; i < nb_apprenants; i++) {
-            if (strcmp(apprenants[i].matricule, matriculeP) == 0) {
+        for (int i = 0; i < nb_apprenants; i++)
+        {
+            if (strcmp(apprenants[i].matricule, matriculeP) == 0)
+            {
                 found = 1;
                 apprenants[i].total_retard += minutes_retard;
-                if (apprenants[i].total_retard > QUOTA_RETARD) {
-                    apprenants[i].renvoi = 1; // L'apprenant dépasse le quota de retard
+                if (apprenants[i].total_retard > QUOTA_RETARD)
+                {
+                    apprenants[i].renvoi = 1;
                 }
                 break;
             }
         }
 
         // Si l'apprenant n'est pas trouvé, l'ajouter au tableau
-        if (!found) {
+        if (!found)
+        {
             strcpy(apprenants[nb_apprenants].matricule, matriculeP);
             apprenants[nb_apprenants].total_retard = minutes_retard;
-            if (apprenants[nb_apprenants].total_retard > QUOTA_RETARD) {
-                apprenants[nb_apprenants].renvoi = 1; // L'apprenant dépasse le quota de retard
+            if (apprenants[nb_apprenants].total_retard > QUOTA_RETARD)
+            {
+                apprenants[nb_apprenants].renvoi = 1;
+                nb_apprenants++;
             }
-            nb_apprenants++;
         }
+
+        fclose(fichier_present);
+
+        FILE *rapport_retards = fopen("RapportRetards.txt", "w");
+        if (rapport_retards == NULL)
+        {
+            printf("Impossible d'ouvrir le fichier pour générer le rapport de retards.\n");
+            return;
+        }
+
+        fprintf(rapport_retards, "Matricule\tTotal Retard (minutes)\tRenvoi\n");
+        for (int i = 0; i < nb_apprenants; i++)
+        {
+            fprintf(rapport_retards, "%s\t\t%d\t\t\t%d\n", apprenants[i].matricule, apprenants[i].total_retard, apprenants[i].renvoi);
+        }
+
+        fclose(rapport_retards);
+
+        printf("Le rapport de retards a été généré avec succès.\n");
     }
+}
 
-    fclose(fichier_present);
-
-    // Écriture des retards dans un fichier
-    FILE *rapport_retards = fopen("RapportRetards.txt", "w");
-    if (rapport_retards == NULL) {
-        printf("Impossible d'ouvrir le fichier pour générer le rapport de retards.\n");
+void afficherRetardsParMatricule()
+{
+    FILE *fichier_retards = fopen("RapportRetards.txt", "r");
+    if (fichier_retards == NULL)
+    {
+        printf("Impossible d'ouvrir le fichier de rapport de retards.\n");
         return;
     }
 
-    fprintf(rapport_retards, "Matricule\tTotal Retard (minutes)\tRenvoi\n");
-    for (int i = 0; i < nb_apprenants; i++) {
-        fprintf(rapport_retards, "%s\t\t%d\t\t\t%d\n", apprenants[i].matricule, apprenants[i].total_retard, apprenants[i].renvoi);
+    printf("Matricule\tTotal Retard (minutes)\n");
+
+    char matricule[20];
+    int retard, total_retard, renvoi;
+
+    while (fprintf(fichier_retards, "%s\t\t%d\t\t\t%d\n", matricule, total_retard, renvoi))
+    {
+        printf("%s\t\t%d\t\t\t%d\n", matricule, total_retard, renvoi);
     }
 
-    fclose(rapport_retards);
-
-    printf("Le rapport de retards a été généré avec succès.\n");
+    fclose(fichier_retards);
 }
 
 void GenereFichier()
@@ -763,7 +765,7 @@ void GenereFichier()
     {
         printf("1-------Listes des présences\n");
         printf("2-------Listes des absences\n");
-        printf("3-------Listes des présences par dates \n");
+        printf("3-------Listes des cumul de retard par mois\n");
         printf("4-------Listes des absences par dates\n");
         printf("Votre choix : \n");
         scanf("%d", &choix_liste);
@@ -787,9 +789,10 @@ void GenereFichier()
         }
         else if (choix_liste == 4)
         {
-            
+            printf("Listes des retards par mois :\n");
+            genererRapportRetards();
+            printf("Fichier bien généré!!\n");
         }
-        
 
         else
         {
@@ -799,46 +802,6 @@ void GenereFichier()
     } while (choix_liste >= 1 && choix_liste <= 4);
 }
 
-void menuAdmin()
-{
-
-    int choix_admin;
-    do
-    {
-        printf("1-------GESTION DES ÉTUDIANTS\n");
-        printf("2-------GÉNÉRATIONS DES FICHIERS\n");
-        printf("3-------MARQUER LES PRESENCES\n");
-        printf("5-------ENVOYER UN MESSAGES\n");
-        printf("6-------DECONNEXION\n");
-        printf("VOTRE CHOIX : \n");
-        scanf("%d", &choix_admin);
-        while (getchar() != '\n')
-            ;
-        if (choix_admin == 3)
-        {
-            printf("Vous avez choisi de marquer la présence de chaque étudiant\n");
-            marquerPresenceAdmin();
-        }
-        else if (choix_admin == 2)
-        {
-            GenereFichier();
-        }
-        else if (choix_admin == 5)
-        {
-            EnvoiMessage();
-        }
-        else if (choix_admin == 6)
-        {
-            logout();
-            return;
-        }
-        else
-        {
-            printf("Choix invalide\n");
-        }
-
-    } while (choix_admin >= 1 && choix_admin <= 6);
-}
 
 int userExists(User users[], int numUsers, char *username, char *classe)
 {
@@ -856,59 +819,60 @@ int userExists(User users[], int numUsers, char *username, char *classe)
     return 0;
 }
 
-void addToInbox(char *username, int numDestinataires, char *message)
+void addToInbox(char *expediteur, char *username, char *date, char *heure, char *message)
 {
-    char filename[MAX_SIZE];
-
-    FILE *file = fopen("inbox.txt", "a");
+    char filename[MAX_SIZE * 2];
+    sprintf(filename, "%s_inbox.txt", username);
+    FILE *file = fopen(filename, "a");
     if (file == NULL)
     {
         printf("Erreur lors de l'ouverture du fichier %s\n", filename);
         return;
     }
 
-    time_t t = time(NULL);
-    struct tm *tm_info = localtime(&t);
-    char date[11], heure[9];
-    strftime(date, 11, "%Y-%m-%d", tm_info);
-    strftime(heure, 9, "%H:%M:%S", tm_info);
-
-    fprintf(file, "%s %s %s %s\n", username, date, heure, message);
-
+    fprintf(file, "%s %s %s %s %s\n", expediteur, username, date, heure, message);
     fclose(file);
 }
 
-void MessageClass(User users[], int numUsers, char *classes[], int numClasses, char *message)
+void MessageClass(char *expediteur, User users[], int numUsers, char *classe, char *message)
 {
-    for (int i = 0; i < numClasses; i++)
+    for (int i = 0; i < numUsers; i++)
     {
-        for (int j = 0; j < numUsers; j++)
+        if (strcmp(users[i].classe, classe) == 0)
         {
-            if (strcmp(users[j].classe, classes[i]) == 0)
-            {
-                addToInbox(users[j].username, 1, message);
-            }
+            char date[11], heure[9];
+            time_t t = time(NULL);
+            struct tm *tm_info = localtime(&t);
+            strftime(date, 11, "%Y-%m-%d", tm_info);
+            strftime(heure, 9, "%H:%M:%S", tm_info);
+            addToInbox(expediteur, users[i].username, date, heure, message);
         }
     }
 }
 
-void MessageUser(User users[], int numUsers, char *destinataires[], int numDestinataires, char *message)
+void MessageUser(char *expediteur, User users[], int numUsers, char *destinataires[], int numDestinataires, char *message)
 {
     for (int i = 0; i < numDestinataires; i++)
     {
-        addToInbox(destinataires[i], 1, message);
+        char date[11], heure[9];
+        time_t t = time(NULL);
+        struct tm *tm_info = localtime(&t);
+        strftime(date, 11, "%Y-%m-%d", tm_info);
+        strftime(heure, 9, "%H:%M:%S", tm_info);
+        addToInbox(expediteur, destinataires[i], date, heure, message);
     }
 }
 
-void MessagePromotion(User users[], int numUsers, char *message)
+void MessagePromotion(char *expediteur, User users[], int numUsers, char *message)
 {
-    printf("Entrez le message pour toute la promotion : ");
-    fflush(stdin);
-    fgets(message, MAX_SIZE, stdin);
-
     for (int i = 0; i < numUsers; i++)
     {
-        addToInbox(users[i].username, 1, message);
+        char date[11], heure[9];
+        time_t t = time(NULL);
+        struct tm *tm_info = localtime(&t);
+        strftime(date, 11, "%Y-%m-%d", tm_info);
+        strftime(heure, 9, "%H:%M:%S", tm_info);
+        addToInbox(expediteur, users[i].username, date, heure, message);
     }
 }
 
@@ -919,126 +883,551 @@ void EnvoiMessage()
     int numApprenants = 0;
     loadApprenants("liste_apprenants.txt", apprenants, &numApprenants);
     char message[MAX_SIZE];
-    char **destinataires = NULL;
     int numDestinataires = 0;
-    char **classes = NULL;
     int numClasses = 0;
+    char reponse;
+    char expediteur[MAX_SIZE];
+    printf("Entrez le nom de l'administrateur : ");
+    fgets(expediteur, MAX_SIZE, stdin);
+    expediteur[strcspn(expediteur, "\n")] = '\0';
 
     do
     {
-        printf("Envoyer un message vers une classe\n");
         printf("Envoyer un message vers tous les apprenants de la promo\n");
+        printf("Envoyer un message vers une classe\n");
         printf("Envoyer un message vers des étudiants choisis\n");
         printf("Votre choix :  ");
         scanf("%d", &choix_message);
         while ((getchar()) != '\n')
-            ; // Vidage du tampon d'entrée
+            ;
 
         if (choix_message == 1)
         {
-            classes = malloc(MAX_USERS * sizeof(char *));
+
+            printf("Entrez le message pour toute la promotion : ");
+            fgets(message, MAX_SIZE, stdin);
+            MessagePromotion(expediteur, apprenants, numApprenants, message);
+        }
+        if (choix_message == 2)
+        {
+            printf("Entrez le message : ");
+            fgets(message, MAX_SIZE, stdin);
+
+            char **classes = malloc(MAX_USERS * sizeof(char *));
             if (classes == NULL)
             {
                 printf("Erreur d'allocation de mémoire.\n");
                 exit(EXIT_FAILURE);
             }
-            printf("Entrez le nombre de classes : ");
-            scanf("%d", &numClasses);
-            while ((getchar()) != '\n')
-                ; // Vidage du tampon d'entrée
-            for (int i = 0; i < numClasses; i++)
+
+            int numClasses = 0;
+            char reponse;
+            do
             {
-                classes[i] = malloc(MAX_SIZE * sizeof(char));
-                if (classes[i] == NULL)
+                classes[numClasses] = malloc(MAX_SIZE * sizeof(char));
+                if (classes[numClasses] == NULL)
                 {
                     printf("Erreur d'allocation de mémoire.\n");
                     exit(EXIT_FAILURE);
                 }
-                printf("Entrez la classe %d : ", i + 1);
-                fgets(classes[i], MAX_SIZE, stdin);
-                classes[i][strcspn(classes[i], "\n")] = '\0'; // Supprimer le retour à la ligne
-            }
-            printf("Entrez le message : ");
-            fgets(message, MAX_SIZE, stdin);
-            MessageClass(apprenants, numApprenants, classes, numClasses, message);
+
+                printf("Entrez la classe : ");
+                fgets(classes[numClasses], MAX_SIZE, stdin);
+                classes[numClasses][strcspn(classes[numClasses], "\n")] = '\0'; // Remove newline character
+
+                if (!userExists(apprenants, numApprenants, NULL, classes[numClasses]))
+                {
+                    printf("La classe spécifiée n'existe pas.\n");
+                    free(classes[numClasses]);
+                    continue;
+                }
+
+                numClasses++;
+
+                if (numClasses < MAX_USERS)
+                {
+                    printf("Voulez-vous ajouter une autre classe ? (O/N) : ");
+                    scanf(" %c", &reponse);
+                    while ((getchar()) != '\n')
+                        ;
+                }
+            } while (reponse == 'O' || reponse == 'o');
+
             for (int i = 0; i < numClasses; i++)
             {
+                MessageClass(expediteur, apprenants, numApprenants, classes[i], message);
                 free(classes[i]);
             }
             free(classes);
         }
-        else if (choix_message == 2)
+        else if (choix_message == 3)
         {
-            destinataires = malloc(MAX_USERS * sizeof(char *));
+            printf("Entrez le message : ");
+            fgets(message, MAX_SIZE, stdin);
+
+            char **destinataires = malloc(MAX_USERS * sizeof(char *));
             if (destinataires == NULL)
             {
                 printf("Erreur d'allocation de mémoire.\n");
                 exit(EXIT_FAILURE);
             }
-            printf("Entrez le nombre de destinataires : ");
-            scanf("%d", &numDestinataires);
-            while ((getchar()) != '\n')
-                ; // Vidage du tampon d'entrée
-            for (int i = 0; i < numDestinataires; i++)
+
+            int numDestinataires = 0;
+            char reponse;
+            do
             {
-                destinataires[i] = malloc(MAX_SIZE * sizeof(char));
-                if (destinataires[i] == NULL)
+                destinataires[numDestinataires] = malloc(MAX_SIZE * sizeof(char));
+                if (destinataires[numDestinataires] == NULL)
                 {
                     printf("Erreur d'allocation de mémoire.\n");
                     exit(EXIT_FAILURE);
                 }
-                printf("Entrez le destinataire %d : ", i + 1);
-                fgets(destinataires[i], MAX_SIZE, stdin);
-                destinataires[i][strcspn(destinataires[i], "\n")] = '\0'; // Supprimer le retour à la ligne
-            }
-            printf("Entrez le message : ");
-            fgets(message, MAX_SIZE, stdin);
-            MessageUser(apprenants, numApprenants, destinataires, numDestinataires, message);
+
+                printf("Entrez le destinataire : ");
+                fgets(destinataires[numDestinataires], MAX_SIZE, stdin);
+                destinataires[numDestinataires][strcspn(destinataires[numDestinataires], "\n")] = '\0'; // Remove newline character
+
+                if (!userExists(apprenants, numApprenants, destinataires[numDestinataires], NULL))
+                {
+                    printf("Le destinataire spécifié n'existe pas.\n");
+                    free(destinataires[numDestinataires]);
+                    continue;
+                }
+
+                numDestinataires++;
+
+                if (numDestinataires < MAX_USERS)
+                {
+                    printf("Voulez-vous ajouter un autre destinataire ? (O/N) : ");
+                    scanf(" %c", &reponse);
+                    while ((getchar()) != '\n')
+                        ;
+                }
+            } while (reponse == 'O' || reponse == 'o');
+
+            MessageUser(expediteur, apprenants, numApprenants, destinataires, numDestinataires, message);
+
             for (int i = 0; i < numDestinataires; i++)
             {
                 free(destinataires[i]);
             }
             free(destinataires);
         }
-        else if (choix_message == 3)
-        {
-            printf("Entrez le message pour toute la promotion : ");
-            fgets(message, MAX_SIZE, stdin);
-            MessagePromotion(apprenants, numApprenants, message);
-        }
+
         else
         {
             printf("Choix Invalide\n");
         }
-
     } while (choix_message < 1 || choix_message > 3);
 }
 
-void AfficherMessagesInbox(User users[], int numUsers)
+int BunieuwulMaBayi(char *username)
 {
-    for (int i = 0; i < numUsers; i++)
+    char filename[MAX_SIZE * 2];
+    sprintf(filename, "%s_inbox.txt", username);
+    FILE *file = fopen(filename, "r");
+
+    if (file == NULL)
     {
-        char filename[MAX_SIZE * 2];
-        sprintf(filename, "%s_inbox.txt", users[i].username);
-        FILE *file = fopen(filename, "r");
-        if (file == NULL)
-        {
-            printf("Impossible d'ouvrir le fichier %s\n", filename);
-            continue;
-        }
-        printf("Messages pour l'utilisateur %s :\n", users[i].username);
-        char line[MAX_SIZE];
-        while (fgets(line, MAX_SIZE, file) != NULL)
-        {
-            printf("%s", line);
-        }
-        fclose(file);
+        printf("Impossible d'ouvrir le fichier %s\n", filename);
+        return -1; // Retourne -1 en cas d'erreur
     }
+
+    int nbLignes = 0;
+
+    char buffer[100];
+    while (fgets(buffer, sizeof(buffer), file) != NULL)
+    {
+        nbLignes++;
+    }
+
+    fclose(file);
+
+    return nbLignes;
+}
+
+// void supprimerTousMessages(char *username)
+// {
+//     char filename[MAX_SIZE * 2];
+//     sprintf(filename, "%s_inbox.txt", username);
+//     FILE *file = fopen(filename, "w");
+//     if (file == NULL)
+//     {
+//         printf("Impossible d'ouvrir le fichier %s\n", filename);
+//         return;
+//     }
+
+//     fclose(file);
+// }
+
+int AfficherMessages(char *username)
+{
+    char filename[MAX_SIZE * 2];
+    sprintf(filename, "%s_inbox.txt", username);
+    FILE *file = fopen(filename, "w+");
+    if (file == NULL)
+    {
+        printf("Impossible d'ouvrir le fichier %s\n", filename);
+        return 0; // Retourner 0 s'il y a une erreur
+    }
+
+    Message messages[MAX_MESSAGES];
+    int nbMessages = 0;
+
+    while (nbMessages < MAX_MESSAGES && fscanf(file, "%s %s %s %s %[^\n]",
+                                               messages[nbMessages].expediteur,
+                                               messages[nbMessages].destinataire,
+                                               messages[nbMessages].date,
+                                               messages[nbMessages].heure,
+                                               messages[nbMessages].message) != EOF)
+    {
+        nbMessages++;
+    }
+
+    fclose(file);
+
+    if (nbMessages == 0)
+    {
+        printf("Aucun message trouvé pour l'utilisateur %s.\n", username);
+        return 0;
+    }
+
+    // Afficher les messages
+    for (int i = 0; i < nbMessages; i++)
+    {
+        printf("De : %s\n", messages[i].expediteur);
+        printf("Date : %s %s\n", messages[i].date, messages[i].heure);
+        printf("Message : ");
+        puts(messages[i].message);
+        printf("\n");
+    }
+
+    // Supprimer tous les messages lus et décrémenter le nombre de messages lus
+    // for (int i = 0; i < nbMessages; i++)
+    // {
+    //     supprimerTousMessages(username);
+    //     decrementerMessagesLus(username);
+    // }
+
+    printf("Tous les messages lus avec succès !!!\n");
+    printf("Appuyez sur Entrée pour sortir....\n");
+
+    return nbMessages;
+}
+
+// void decrementerMessagesLus(char *username)
+// {
+//     char filename[MAX_SIZE * 2];
+//     sprintf(filename, "%s_inbox.txt", username);
+//     FILE *file = fopen(filename, "r+");
+//     if (file == NULL)
+//     {
+//         printf("Impossible d'ouvrir le fichier %s\n", filename);
+//         return;
+//     }
+
+//     int count;
+//     fscanf(file, "%d", &count);
+//     if (count > 0)
+//     {
+//         count--;
+//     }
+
+//     // Revenir au début du fichier et écrire le nouveau nombre de messages
+//     fseek(file, 0, SEEK_SET);
+//     fprintf(file, "%d\n", count);
+
+//     fclose(file);
+// }
+
+
+// Fonction pour rechercher un apprenant spécifique
+int RechercheApprenant(User apprenants[], int numApprenants, char *username)
+{
+    for (int i = 0; i < numApprenants; i++)
+    {
+        if (strcmp(apprenants[i].username, username) == 0)
+        {
+            return i; 
+        }
+    }
+    return -1; 
+}
+
+void writeApprenants(char *filename, User apprenants[], int numApprenants)
+{
+    FILE *file = fopen(filename, "w");
+    if (file == NULL)
+    {
+        printf("Erreur lors de l'ouverture du fichier %s.\n", filename);
+        exit(1);
+    }
+
+    // Écriture des apprenants dans le fichier
+    for (int i = 0; i < numApprenants; i++)
+    {
+        fprintf(file, "%s %s %s %s %s\n", apprenants[i].username, apprenants[i].matricule, apprenants[i].prenom, apprenants[i].classe, apprenants[i].password);
+    }
+
+    fclose(file);
+}
+
+// Fonction pour ajouter un apprenant
+ void ajoutApprenant(User apprenants[], int *numApprenants)
+{
+    if (*numApprenants >= MAX_USERS)
+    {
+        printf("Nombre maximum d'apprenants atteint.\n");
+        return;
+    }
+
+    User newApprenant;
+    printf("Entrez le nom d'utilisateur: ");
+    scanf("%s", newApprenant.username);
+
+    // Vérifier si l'apprenant existe déjà
+    if (RechercheApprenant(apprenants, *numApprenants, newApprenant.username) != -1)
+    {
+        printf("L'apprenant existe déjà.\n");
+        return;
+    }
+
+    printf("Entrez le matricule: ");
+    scanf("%s", newApprenant.matricule);
+    printf("Entrez le prénom: ");
+    scanf("%s", newApprenant.prenom);
+    printf("Entrez la classe: ");
+    scanf("%s", newApprenant.classe);
+    printf("Entrez le mot de passe: ");
+    scanf("%s", newApprenant.password);
+
+    apprenants[*numApprenants] = newApprenant;
+    (*numApprenants)++;
+    printf("Apprenant ajouté avec succès.\n");
+
+    // Écrire la liste mise à jour dans le fichier
+    writeApprenants("liste_apprenants.txt", apprenants, *numApprenants);
+}
+
+// Fonction pour modifier les informations d'un apprenant
+void modifierApprenant(User apprenants[], int numApprenants)
+{
+    char usernameM[MAX_SIZE];
+    printf("Entrez le nom d'utilisateur de l'apprenant à modifier : ");
+    scanf("%s", usernameM);
+
+    int index = RechercheApprenant(apprenants, numApprenants, usernameM);
+    if (index != -1)
+    {
+        printf("Entrez le nouveau matricule: ");
+        scanf("%s", apprenants[index].matricule);
+        printf("Entrez le nouveau prénom: ");
+        scanf("%s", apprenants[index].prenom);
+        printf("Entrez la nouvelle classe: ");
+        scanf("%s", apprenants[index].classe);
+        printf("Entrez le nouveau mot de passe: ");
+        scanf("%s", apprenants[index].password);
+        printf("Apprenant modifié avec succès.\n");
+
+        writeApprenants("liste_apprenants.txt", apprenants, numApprenants);
+    }
+    else
+    {
+        printf("Apprenant non trouvé.\n");
+    }
+}
+
+// Fonction pour supprimer un apprenant
+void supprimerApprenant(User apprenants[], int *numApprenants)
+{
+    char usernameS[MAX_SIZE];
+    printf("Entrez le nom d'utilisateur de l'apprenant à supprimer : ");
+    scanf("%s", usernameS);
+
+    int index = RechercheApprenant(apprenants, *numApprenants, usernameS);
+    if (index != -1)
+    {
+        // Déplacer les apprenants suivants vers l'indice précédent
+        for (int i = index; i < *numApprenants - 1; i++)
+        {
+            apprenants[i] = apprenants[i + 1];
+        }
+
+        (*numApprenants)--;
+        printf("Apprenant supprimé avec succès.\n");
+
+        writeApprenants("liste_apprenants.txt", apprenants, *numApprenants);
+    }
+    else
+    {
+        printf("Apprenant non trouvé.\n");
+    }
+}
+
+void Gestion_etudiant() {
+    User apprenants[MAX_USERS]; 
+    int count = 0;               
+
+    loadApprenants("liste_apprenants.txt", apprenants, &count);
+
+     int choix;
+    do {
+        printf("\n1. Ajouter un apprenant\n2. Modifier un apprenant\n3. Supprimer un apprenant\n4. Quitter\n");
+        printf("Entrez votre choix: ");
+        scanf("%d", &choix);
+
+        switch (choix) {
+            case 1:
+                ajoutApprenant(apprenants, &count);
+                break;
+            case 2:
+                modifierApprenant(apprenants, count);
+                break;
+            case 3:
+                supprimerApprenant(apprenants, &count);
+                break;
+            case 4:
+
+                break;
+            default:
+                printf("Choix invalide. Veuillez réessayer.\n");
+        }
+    } while (choix != 4);
+
+}
+
+void menuAdmin()
+{
+
+    int choix_admin;
+    do
+    {
+        printf("1-------GESTION DES ÉTUDIANTS\n");
+        printf("2-------GÉNÉRATIONS DES FICHIERS\n");
+        printf("3-------MARQUER LES PRESENCES\n");
+        printf("5-------ENVOYER UN MESSAGES\n");
+        printf("6-------DECONNEXION\n");
+        printf("VOTRE CHOIX : \n");
+        scanf("%d", &choix_admin);
+        while (getchar() != '\n')
+            ;
+        if (choix_admin == 1)
+        {
+             Gestion_etudiant() ;
+        }
+        else if (choix_admin == 2)
+        {
+            GenereFichier();
+        }
+        else if (choix_admin == 3)
+        {
+            printf("Vous avez choisi de marquer la présence de chaque étudiant\n");
+            marquerPresenceAdmin();
+        }
+
+        else if (choix_admin == 5)
+        {
+            EnvoiMessage();
+        }
+        else if (choix_admin == 6)
+        {
+            logout();
+            return;
+        }
+
+        else
+        {
+            printf("Choix invalide\n");
+        }
+
+    } while (choix_admin >= 1 && choix_admin <= 6);
+}
+
+
+void menuApprenant()
+{
+    time_t maintenant;
+    struct tm *temps_info;
+    char date[MAX_SIZE];
+    int choix_apprenant;
+    char matricule[MAX_SIZE];
+    User apprenant;
+    char *username = NULL;
+
+    char prenom[MAX_SIZE];
+    char classe[MAX_SIZE];
+    char password[MAX_SIZE];
+
+    //       strcpy(username, apprenant.username);
+
+    // printf("le username est  %s", username);
+
+    int nbM = 0;
+
+    nbM = BunieuwulMaBayi(currentUsername);
+
+    do
+    {
+
+        printf("1-------MARQUER MA PRÉSENCE\n");
+        printf("2-------NOMBRE DE MINUTES D’ABSENCE\n");
+        printf("3-------MES MESSAGES (%d)\n", nbM);
+        printf("4-------DECONNEXION\n");
+        printf("VOTRE CHOIX : ");
+        scanf("%d", &choix_apprenant);
+
+        while (getchar() != '\n')
+            ;
+
+        if (choix_apprenant == 1)
+        {
+            printf("Vous avez choisi de marquer votre présence\n");
+            char heure_arrivee[10];
+            maintenant = time(NULL);
+            temps_info = localtime(&maintenant);
+            strftime(date, sizeof(date), "%Y-%m-%d", temps_info);
+            strftime(heure_arrivee, sizeof(heure_arrivee), "%H:%M", temps_info);
+
+            printf("Entrer votre matricule : ");
+            fgets(matricule, sizeof(matricule), stdin);
+            matricule[strcspn(matricule, "\n")] = '\0';
+
+            if (rechercherApprenant(username, matricule, prenom, classe, password))
+            {
+                marquerPresenceApprenant(matricule, prenom, classe, password, heure_arrivee);
+
+                return;
+            }
+            else
+            {
+                printf("Matricule invalide.\n");
+                sleep(2);
+                continue;
+            }
+        }
+        else if (choix_apprenant == 2)
+        {
+            afficherRetardsParMatricule();
+        }
+
+        else if (choix_apprenant == 3)
+        {
+            AfficherMessages(currentUsername);
+            nbM = BunieuwulMaBayi(currentUsername);
+        }
+
+        if (choix_apprenant == 4)
+        {
+            logout();
+        }
+        while (getchar() != '\n')
+            ;
+    } while (choix_apprenant >= 1 && choix_apprenant <= 4);
 }
 
 int main()
 {
-    User apprenants[MAX_USERS];
+    User apprenants;
     int numApprenants = 0;
     User admins[MAX_USERS];
     int numAdmins = 0;
@@ -1048,7 +1437,7 @@ int main()
     if (typeUtilisateur == 1)
     {
         printf("Connecté en tant qu'apprenant.\n");
-        menuApprenant();
+        menuApprenant(apprenants);
     }
     else if (typeUtilisateur == 2)
     {
